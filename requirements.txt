@@ -1,0 +1,6 @@
+kafka-python-ng
+yfinance
+pandas
+psycopg2-binary
+configparser
+requests

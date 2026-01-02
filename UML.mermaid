@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant YF as Yahoo Finance API
+    participant KP as Python Producer
+    participant K as Apache Kafka
+    participant RS as AWS Redshift
+    participant SP as PySpark Job
+    participant PG as PostgreSQL
+
+    rect rgb(240, 248, 255)
+        Note over YF, K: Phase 1: Ingestion (Streaming)
+        KP->>YF: Request Stock Data (e.g., AAPL, GOOGL)
+        YF-->>KP: Return Real-time/Historical Data
+        KP->>K: Produce Message (Topic: stock-raw)
+    end
+
+    rect rgb(255, 250, 240)
+        Note over K, RS: Phase 2: Staging
+        K->>RS: Sink Connector ingest data
+        RS-->>RS: Store Raw Data (Table: raw_stocks)
+    end
+
+    rect rgb(240, 255, 240)
+        Note over RS, PG: Phase 3: Processing & Serving
+        SP->>RS: Read Raw Data (Spark JDBC)
+        SP->>SP: Transform (Clean, Calculate MA, RSI)
+        SP->>PG: Write Final Data (Table: processed_stocks)
+        PG-->>SP: Acknowledge Success
+    end

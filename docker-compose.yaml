@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # --- INFRASTRUCTURE ---
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - data-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - data-network
+
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: stockdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - data-network
+
+  # --- APPS ---
+  producer:
+    build: .
+    container_name: stock-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    environment:
+      - KAFKA_BOOTSTRAP_SERVER=kafka:29092
+    command: python src/producers/stock_producer.py
+    restart: always
+    networks:
+      - data-network
+
+  consumer:
+    build: .
+    container_name: stock-consumer
+    depends_on:
+      - kafka
+      - postgres
+    volumes:
+      - .:/app
+    environment:
+      - KAFKA_BOOTSTRAP_SERVER=kafka:29092
+      - DB_HOST=postgres
+      - DB_PORT=5432
+    command: python src/consumers/redshift_sink.py
+    restart: always
+    networks:
+      - data-network
+
+  # --- WEB UIs (THÊM MỚI) ---
+  
+  # 1. Giao diện cho Kafka
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"  # Truy cập qua http://localhost:8080
+    environment:
+      # Cấu hình để UI kết nối vào Kafka bên trong Docker network
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    depends_on:
+      - kafka
+    networks:
+      - data-network
+
+  # 2. Giao diện cho PostgreSQL
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      # Tài khoản đăng nhập pgAdmin (Không phải tài khoản DB)
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80" # Truy cập qua http://localhost:5050
+    depends_on:
+      - postgres
+    networks:
+      - data-network
+
+networks:
+  data-network:
+    driver: bridge
+
+volumes:
+  pgdata:

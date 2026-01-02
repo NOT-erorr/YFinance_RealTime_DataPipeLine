@@ -1,0 +1,35 @@
+graph LR
+    subgraph Source [Data Source]
+        API[Yahoo Finance API]
+    end
+
+    subgraph Ingestion [Streaming Layer]
+        Producer[Python Kafka Producer]
+        Kafka{Apache Kafka}
+        Connector[Kafka Connect / Consumer]
+    end
+
+    subgraph Storage_Raw [Data Warehouse]
+        Redshift[(AWS Redshift)]
+    end
+
+    subgraph Processing [Transformation Layer]
+        Spark[PySpark Cluster]
+    end
+
+    subgraph Storage_Final [Serving Layer]
+        Postgres[(PostgreSQL DB)]
+    end
+
+    %% Flow
+    API -->|Fetch Data| Producer
+    Producer -->|Push JSON| Kafka
+    Kafka -->|Stream| Connector
+    Connector -->|Load Raw Data| Redshift
+    Redshift -->|Read JDBC| Spark
+    Spark -->|Process & Transform| Spark
+    Spark -->|Write Processed Data| Postgres
+
+    style Kafka fill:#f,stroke:#333,stroke-width:2px
+    style Spark fill:#ff9,stroke:#333,stroke-width:2px
+    style Redshift fill:#bbf,stroke:#333,stroke-width:2px
