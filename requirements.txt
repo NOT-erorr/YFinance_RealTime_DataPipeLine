@@ -4,3 +4,4 @@ pandas
 psycopg2-binary
 configparser
 requests
+pyspark==3.5.0  # <-- Thêm dòng này

@@ -82,6 +82,26 @@ services:
     restart: always
     networks:
       - data-network
+  
+  # --- SPARK JOB ---
+  spark-processor:
+    build: .
+    container_name: spark-processor
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+    environment:
+      - DB_HOST=postgres
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=stockdb
+    # Lệnh mặc định là không làm gì cả (để container sống chờ lệnh exec)
+    # Hoặc ta có thể set nó chạy job ngay lập tức rồi tắt.
+    # Ở đây mình set nó sleep để bạn có thể vào container chạy thử nhiều lần.
+    command: tail -f /dev/null 
+    networks:
+      - data-network
 
   # --- WEB UIs (THÊM MỚI) ---
   
