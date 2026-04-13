@@ -27,3 +27,5 @@ pytest-cov==4.1.0
 # Jupyter (for notebooks)
 jupyter==1.0.0
 ipykernel==6.29.0
+
+lxml==5.4.0

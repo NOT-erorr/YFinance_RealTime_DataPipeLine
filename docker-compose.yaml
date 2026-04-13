@@ -53,18 +53,27 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      # symbols-init:
+      #   condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: stock-prices
-      YF_SYMBOLS: AAPL,MSFT,GOOG
+      # Đường dẫn tới file symbols được sinh bởi symbols-init
+      YF_SYMBOLS_FILE: /app/data/sp500_symbols.json
+      YF_FETCH_INTERVAL_SECONDS: 60
+      YF_BATCH_SIZE: 50
+      ENABLE_MOCK_FALLBACK: "true"
       LOG_LEVEL: INFO
     command: python -m producer.fetch_data
+    volumes:
+      - ./data:/app/data
+      - ./producer/sp500_symbols.json:/app/data/sp500_symbols.json:ro
 
-  datapipeline:
+  consumer:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: datapipeline-kraf
+    container_name: consumer-kraf
     depends_on:
       kafka:
         condition: service_healthy
@@ -79,10 +88,10 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: kraf_db
-      DUCKDB_PATH: data/yf_analytics.duckdb
+      DUCKDB_PATH: /app/data/yf_analytics.duckdb
       STOCK_TABLE: stock_prices
       LOG_LEVEL: INFO
-    command: python -m datapipeline.ETL
+    command: python -m consumer.consumer
     volumes:
       - ./data:/app/data
 
@@ -103,13 +112,31 @@ services:
       dockerfile: Dockerfile
     container_name: duckdb-check
     depends_on:
-      datapipeline:
+      consumer:
         condition: service_started
     command: ["sleep", "infinity"]
     volumes:
       - ./data:/app/data
     profiles: ["tools"]
 
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_storage:/var/lib/grafana
+      # FIX: thêm target path còn thiếu, mount cùng thư mục data với consumer
+      - ./data:/var/lib/grafana/data
+    depends_on:
+      consumer:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   kafka_data:
   postgres_data:
+  grafana_storage:

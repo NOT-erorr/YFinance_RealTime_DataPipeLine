@@ -62,3 +62,6 @@ Thumbs.db
 *.sqlite
 *.duckdb
 *.duckdb.wal
+
+# imgs for docs
+imgs/*
