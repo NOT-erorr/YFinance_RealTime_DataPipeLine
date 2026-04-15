@@ -1,0 +1,142 @@
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka-kraft
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: postgres:15
+    container_name: postgres-kraf
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: kraf_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/schemas/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d kraf_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: producer-kraf
+    depends_on:
+      kafka:
+        condition: service_healthy
+      # symbols-init:
+      #   condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: stock-prices
+      # Đường dẫn tới file symbols được sinh bởi symbols-init
+      YF_SYMBOLS_FILE: /app/data/sp500_symbols.json
+      YF_FETCH_INTERVAL_SECONDS: 60
+      YF_BATCH_SIZE: 50
+      ENABLE_MOCK_FALLBACK: "true"
+      LOG_LEVEL: INFO
+    command: python -m producer.fetch_data
+    volumes:
+      - ./data:/app/data
+      - ./producer/sp500_symbols.json:/app/data/sp500_symbols.json:ro
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: consumer-kraf
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: stock-prices
+      KAFKA_CONSUMER_GROUP: stock-consumer-group
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: kraf_db
+      DUCKDB_PATH: /app/data/yf_analytics.duckdb
+      STOCK_TABLE: stock_prices
+      LOG_LEVEL: INFO
+    command: python -m consumer.consumer
+    volumes:
+      - ./data:/app/data
+
+  postgres-check:
+    image: postgres:15
+    container_name: postgres-check
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: admin
+    command: ["sleep", "infinity"]
+    profiles: ["tools"]
+
+  duckdb-check:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: duckdb-check
+    depends_on:
+      consumer:
+        condition: service_started
+    command: ["sleep", "infinity"]
+    volumes:
+      - ./data:/app/data
+    profiles: ["tools"]
+
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_storage:/var/lib/grafana
+      # FIX: thêm target path còn thiếu, mount cùng thư mục data với consumer
+      - ./data:/var/lib/grafana/data
+    depends_on:
+      consumer:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  kafka_data:
+  postgres_data:
+  grafana_storage:

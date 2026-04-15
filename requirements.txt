@@ -1,0 +1,31 @@
+# Data Processing
+# pyspark==3.5.0
+kafka-python==2.0.2
+aiokafka==0.10.0
+yfinance==0.2.36
+
+# Database
+duckdb==0.10.0
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+
+# Data Manipulation
+pandas==2.2.0
+numpy==1.26.3
+
+# Configuration
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Logging
+loguru==0.7.2
+
+# Testing
+pytest==7.4.4
+pytest-cov==4.1.0
+
+# Jupyter (for notebooks)
+jupyter==1.0.0
+ipykernel==6.29.0
+
+lxml==5.4.0
