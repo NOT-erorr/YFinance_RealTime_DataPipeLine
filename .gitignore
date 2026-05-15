@@ -65,3 +65,6 @@ Thumbs.db
 
 # imgs for docs
 imgs/*
+
+# gitignore
+.gitgnore

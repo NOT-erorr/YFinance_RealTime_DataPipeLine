@@ -1,3 +1,4 @@
+import json
 import os
 from typing import List
 
@@ -7,11 +8,22 @@ def csv_to_list(raw_value: str, fallback: List[str]) -> List[str]:
     return values or fallback
 
 
+def _load_symbols() -> List[str]:
+    symbols_file = os.getenv("YF_SYMBOLS_FILE")
+    if symbols_file and os.path.isfile(symbols_file):
+        with open(symbols_file, "r") as f:
+            data = json.load(f)
+        symbols = data if isinstance(data, list) else list(data.keys())
+        if symbols:
+            return symbols
+    return csv_to_list(os.getenv("YF_SYMBOLS", "AAPL,MSFT,GOOG"), ["AAPL", "MSFT", "GOOG"])
+
+
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "stock-prices")
 KAFKA_CONSUMER_GROUP = os.getenv("KAFKA_CONSUMER_GROUP", "stock-consumer-group")
 
-YF_SYMBOLS = csv_to_list(os.getenv("YF_SYMBOLS", "AAPL,MSFT,GOOG"), ["AAPL", "MSFT", "GOOG"])
+YF_SYMBOLS = _load_symbols()
 
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))

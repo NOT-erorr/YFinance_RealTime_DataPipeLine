@@ -67,7 +67,6 @@ services:
     command: python -m producer.fetch_data
     volumes:
       - ./data:/app/data
-      - ./producer/sp500_symbols.json:/app/data/sp500_symbols.json:ro
 
   consumer:
     build:
@@ -127,11 +126,14 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
       - grafana_storage:/var/lib/grafana
-      # FIX: thêm target path còn thiếu, mount cùng thư mục data với consumer
       - ./data:/var/lib/grafana/data
+      - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
+      postgres:
+        condition: service_healthy
       consumer:
         condition: service_started
     restart: unless-stopped

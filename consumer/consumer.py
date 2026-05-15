@@ -89,7 +89,9 @@ class ParallelWarehouseConsumer:
                 change FLOAT,
                 change_percent FLOAT,
                 currency TEXT,
-                source TEXT
+                source TEXT,
+                produced_at BIGINT,
+                ingested_at TIMESTAMP
             )
             """
         )
@@ -101,6 +103,8 @@ class ParallelWarehouseConsumer:
         pg_cursor.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS volume BIGINT")
         pg_cursor.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS currency TEXT")
         pg_cursor.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS source TEXT")
+        pg_cursor.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS produced_at BIGINT")
+        pg_cursor.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS ingested_at TIMESTAMP")
         pg_conn.commit()
 
         duck_conn.execute(
@@ -118,7 +122,9 @@ class ParallelWarehouseConsumer:
                 change DOUBLE,
                 change_percent DOUBLE,
                 currency VARCHAR,
-                source VARCHAR
+                source VARCHAR,
+                produced_at BIGINT,
+                ingested_at TIMESTAMP
             )
             """
         )
@@ -130,6 +136,8 @@ class ParallelWarehouseConsumer:
         duck_conn.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS volume BIGINT")
         duck_conn.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS currency VARCHAR")
         duck_conn.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS source VARCHAR")
+        duck_conn.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS produced_at BIGINT")
+        duck_conn.execute(f"ALTER TABLE {self.stock_table} ADD COLUMN IF NOT EXISTS ingested_at TIMESTAMP")
 
     async def connect(self) -> None:
         self.consumer = self._build_consumer()
@@ -170,6 +178,10 @@ class ParallelWarehouseConsumer:
                 )
             )
 
+            raw_produced_at = data.get("produced_at")
+            produced_at = int(raw_produced_at) if raw_produced_at else None
+            ingested_at = datetime.utcnow()
+
             return {
                 "symbol": symbol,
                 "price": close_price,
@@ -184,6 +196,8 @@ class ParallelWarehouseConsumer:
                 "change_percent": change_percent_value,
                 "currency": str(data.get("currency", "USD")),
                 "source": str(data.get("source", "unknown")),
+                "produced_at": produced_at,
+                "ingested_at": ingested_at,
             }
         except (KeyError, TypeError, ValueError) as exc:
             logger.warning("Skip invalid payload %s, error=%s", data, exc)
@@ -198,8 +212,8 @@ class ParallelWarehouseConsumer:
         pg_cursor.execute(
             f"""
             INSERT INTO {self.stock_table}
-            (symbol, price, timestamp, datetime, open, high, low, close, volume, change, change_percent, currency, source)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (symbol, price, timestamp, datetime, open, high, low, close, volume, change, change_percent, currency, source, produced_at, ingested_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 row["symbol"],
@@ -215,6 +229,8 @@ class ParallelWarehouseConsumer:
                 row["change_percent"],
                 row["currency"],
                 row["source"],
+                row["produced_at"],
+                row["ingested_at"],
             ),
         )
         pg_conn.commit()
@@ -227,8 +243,8 @@ class ParallelWarehouseConsumer:
         duck_conn.execute(
             f"""
             INSERT INTO {self.stock_table}
-            (symbol, price, timestamp, datetime, open, high, low, close, volume, change, change_percent, currency, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (symbol, price, timestamp, datetime, open, high, low, close, volume, change, change_percent, currency, source, produced_at, ingested_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["symbol"],
@@ -244,6 +260,8 @@ class ParallelWarehouseConsumer:
                 row["change_percent"],
                 row["currency"],
                 row["source"],
+                row["produced_at"],
+                row["ingested_at"],
             ),
         )
 
